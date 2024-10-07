@@ -1,0 +1,13 @@
+name: 'AI PR Reviewer'
+description: 'Helps with technical & Contextual PR review'
+author: 'Farhan Nawaz <nawaz@adobe.com>'
+inputs:
+  context:
+    description: 'Add additional context to consider'
+    required: false
+outputs:
+  comments:
+    description: 'Review Comments'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
