@@ -89,12 +89,6 @@ async function postCommentOnGitHub(owner, repo, pull_number, filename, line, bod
 
 async function run() {
   try {
-    // Load environment variables
-    const openaiApiKey = core.getInput('openai_api_key', { required: true });
-    const githubAppId = core.getInput('github_app_id', { required: true });
-    const githubPrivateKey = core.getInput('github_private_key', { required: true });
-    const githubInstallationId = core.getInput('github_installation_id', { required: true });
-    
     // Get the PR URL from the GitHub context and extract owner, repo, and pull_number
     const context = require('@actions/github').context;
     const { owner, repo } = context.repo;
@@ -238,4 +232,9 @@ async function run() {
   }
 }
 
+// Load environment variables
+const openaiApiKey = core.getInput('openai_api_key', { required: true });
+const githubAppId = core.getInput('github_app_id', { required: true });
+const githubPrivateKey = core.getInput('github_private_key', { required: true });
+const githubInstallationId = core.getInput('github_installation_id', { required: true });
 run();
