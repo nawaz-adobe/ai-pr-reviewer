@@ -2,7 +2,6 @@ const core = require('@actions/core');
 const { Octokit } = require('@octokit/rest');
 const { createAppAuth } = require('@octokit/auth-app');
 const axios = require('axios');
-const fs = require('fs');
 
 async function run() {
   try {
@@ -12,7 +11,7 @@ async function run() {
     const githubPrivateKey = core.getInput('github_private_key', { required: true });
     const githubInstallationId = core.getInput('github_installation_id', { required: true });
     
-    // Get the PR URL from the GitHub context
+    // Get the PR URL from the GitHub context and extract owner, repo, and pull_number
     const context = require('@actions/github').context;
     const { owner, repo } = context.repo;
     const pull_number = context.payload.pull_request.number;
@@ -72,6 +71,7 @@ async function run() {
 
     for (let i = 0; i < diffLines.length; i++) {
       const line = diffLines[i];
+      console.log(line);
       if (line.startsWith("+++ b/")) {
         currentFile = line.substring(6);
         fileComments[currentFile] = [];
@@ -93,27 +93,48 @@ async function run() {
         );
 
         const lineComment = lineCommentResponse.data.choices[0].message.content;
-        fileComments[currentFile].push({
+
+        // Create a comment object
+        const comment = {
           body: lineComment,
           commit_id: pull_request.head.sha,
           path: currentFile,
-          position: i + 1,
-        });
+          position: i + 1, // Adjust the position if needed
+        };
+
+        // Get the diff hunk for the comment
+        const hunkSize = 3; // Number of lines to include before and after the comment line
+        const hunkStart = Math.max(0, i - hunkSize); // Start index
+        const hunkEnd = Math.min(diffLines.length, i + hunkSize + 1); // End index
+
+        // Create the diff hunk string
+        const diffHunk = diffLines.slice(hunkStart, hunkEnd).join('\n');
+
+        // Include diff_hunk in the comment object
+        comment.diff_hunk = diffHunk;
+        // Add the comment to the array for the current file
+        fileComments[currentFile].push(comment);
       }
     }
 
     // Create review comments on the PR
     for (const file in fileComments) {
       for (const comment of fileComments[file]) {
+        if (!comment.position || !comment.diff_hunk) {
+          console.error(`Invalid comment data: ${JSON.stringify(comment)}`);
+          continue;  // Skip this comment
+        }
+
         await octokit.pulls.createReviewComment({
           owner,
           repo,
           pull_number,
           body: comment.body,
+          position: comment.position,  // This needs to be a valid line number
           commit_id: comment.commit_id,
           path: comment.path,
-          position: comment.position,
           side: "RIGHT",
+          diff_hunk: comment.diff_hunk  // This must be provided
         });
       }
     }
