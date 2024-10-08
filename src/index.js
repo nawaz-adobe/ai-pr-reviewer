@@ -71,7 +71,6 @@ async function run() {
 
     for (let i = 0; i < diffLines.length; i++) {
       const line = diffLines[i];
-      console.log(line);
       if (line.startsWith("+++ b/")) {
         currentFile = line.substring(6);
         fileComments[currentFile] = [];
@@ -93,6 +92,8 @@ async function run() {
         );
 
         const lineComment = lineCommentResponse.data.choices[0].message.content;
+        console.log('Response from OpenAI API:');
+        console.log(lineCommentResponse);
 
         // Create a comment object
         const comment = {
@@ -103,15 +104,15 @@ async function run() {
         };
 
         // Get the diff hunk for the comment
-        const hunkSize = 3; // Number of lines to include before and after the comment line
-        const hunkStart = Math.max(0, i - hunkSize); // Start index
-        const hunkEnd = Math.min(diffLines.length, i + hunkSize + 1); // End index
+        // const hunkSize = 3; // Number of lines to include before and after the comment line
+        // const hunkStart = Math.max(0, i - hunkSize); // Start index
+        // const hunkEnd = Math.min(diffLines.length, i + hunkSize + 1); // End index
 
         // Create the diff hunk string
-        const diffHunk = diffLines.slice(hunkStart, hunkEnd).join('\n');
+        // const diffHunk = diffLines.slice(hunkStart, hunkEnd).join('\n');
 
         // Include diff_hunk in the comment object
-        comment.diff_hunk = diffHunk;
+        // comment.diff_hunk = diffHunk;
         // Add the comment to the array for the current file
         fileComments[currentFile].push(comment);
       }
