@@ -38,8 +38,6 @@ async function run() {
       mediaType: { format: 'diff' },
     });
 
-    console.log(diffData);
-
     // Call OpenAI API to summarize PR changes
     const response = await axios.post(
       "https://pr-review-bot.openai.azure.com/openai/deployments/pr-review-bot/chat/completions?api-version=2024-02-01",
@@ -73,6 +71,7 @@ async function run() {
 
     for (let i = 0; i < diffLines.length; i++) {
       const line = diffLines[i];
+      console.log(line);
       if (line.startsWith("+++ b/")) {
         currentFile = line.substring(6);
         fileComments[currentFile] = [];
