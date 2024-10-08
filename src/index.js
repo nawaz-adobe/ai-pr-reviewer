@@ -112,10 +112,12 @@ async function run() {
           repo,
           pull_number,
           body: comment.body,
+          position: comment.position,  // This needs to be a valid line number
           commit_id: comment.commit_id,
           path: comment.path,
           position: comment.position,
           side: "RIGHT",
+          diff_hunk: comment.diff_hunk  // This must be provided
         });
       }
     }
