@@ -2,9 +2,18 @@ name: 'AI PR Reviewer'
 description: 'Helps with technical & Contextual PR review'
 author: 'Farhan Nawaz <nawaz@adobe.com>'
 inputs:
-  context:
-    description: 'Add additional context to consider'
-    required: false
+  openai_api_key:
+    description: 'OpenAI API key'
+    required: true
+  github_app_id:
+    description: 'GitHub App ID'
+    required: true
+  github_private_key:
+    description: 'GitHub Private Key'
+    required: true
+  github_installation_id:
+    description: 'GitHub Installation ID'
+    required: true
 outputs:
   comments:
     description: 'Review Comments'

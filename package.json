@@ -1,0 +1,28 @@
+{
+    "name": "ai-pr-reviewer",
+    "version": "1.0.0",
+    "description": "Helps with technical & Contextual PR review",
+    "main": "src/index.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+      "@actions/core": "^1.10.0",
+      "@actions/github": "^5.0.0",
+      "@octokit/rest": "^18.0.0",
+      "@octokit/auth-app": "^4.0.0",
+      "axios": "^0.24.0",
+      "dotenv": "^10.0.0"
+    },
+    "engines": {
+      "node": ">=20.x"
+    },
+    "keywords": [
+      "github",
+      "action",
+      "openai",
+      "pull request"
+    ],
+    "author": "Farhan Nawaz <nawaz@adobe.com>",
+    "license": "Apache 2.0"
+}  
