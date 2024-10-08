@@ -107,6 +107,16 @@ async function run() {
     // Create review comments on the PR
     for (const file in fileComments) {
       for (const comment of fileComments[file]) {
+        console.log({
+          owner,
+          repo,
+          pull_number: pull_request.number,
+          body: lineComment,
+          commit_id: pull_request.head.sha,
+          path: comment.path,
+          position: comment.position,
+        });
+
         if (!comment.position || !comment.diff_hunk) {
           console.error(`Invalid comment data: ${JSON.stringify(comment)}`);
           continue;  // Skip this comment
