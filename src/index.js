@@ -111,7 +111,7 @@ async function run() {
           owner,
           repo,
           pull_number: pull_request.number,
-          body: lineComment,
+          body: comment,
           commit_id: pull_request.head.sha,
           path: comment.path,
           position: comment.position,
