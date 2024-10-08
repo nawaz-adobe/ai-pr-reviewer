@@ -78,6 +78,7 @@ async function postCommentOnGitHub(owner, repo, pull_number, filename, line, bod
           repo,
           pull_number,
           body,
+          commit_id: pull_request.head.sha,
           path: filename, // Specify the filename
           line: line, // Specify the line number in the hunk
       });
@@ -89,10 +90,6 @@ async function postCommentOnGitHub(owner, repo, pull_number, filename, line, bod
 
 async function run() {
   try {
-    // Fetch pull request data
-    const { data: pull_request } = await octokit.pulls.get({ owner, repo, pull_number });
-    const prTitle = pull_request.title;
-
     // Fetch the diff of the pull request
     const { data: diffData } = await octokit.pulls.get({
       owner,
@@ -237,4 +234,9 @@ const octokit = new Octokit({
     installationId: githubInstallationId,
   },
 });
+
+// Fetch pull request data
+const { data: pull_request } = await octokit.pulls.get({ owner, repo, pull_number });
+const prTitle = pull_request.title;
+
 run();
