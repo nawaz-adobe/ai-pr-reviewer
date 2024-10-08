@@ -2,7 +2,6 @@ const core = require('@actions/core');
 const { Octokit } = require('@octokit/rest');
 const { createAppAuth } = require('@octokit/auth-app');
 const axios = require('axios');
-const fs = require('fs');
 
 async function run() {
   try {
@@ -27,8 +26,6 @@ async function run() {
       },
     });
 
-    console.log('Looks good');
-
     // Fetch pull request data
     const { data: pull_request } = await octokit.pulls.get({ owner, repo, pull_number });
     const prTitle = pull_request.title;
@@ -40,6 +37,8 @@ async function run() {
       pull_number,
       mediaType: { format: 'diff' },
     });
+
+    console.log(diffData);
 
     // Call OpenAI API to summarize PR changes
     const response = await axios.post(
@@ -95,28 +94,33 @@ async function run() {
         );
 
         const lineComment = lineCommentResponse.data.choices[0].message.content;
-        fileComments[currentFile].push({
+
+        // Create a comment object
+        const comment = {
           body: lineComment,
           commit_id: pull_request.head.sha,
           path: currentFile,
-          position: i + 1,
-        });
+          position: i + 1, // Adjust the position if needed
+        };
+
+        // Get the diff hunk for the comment
+        const hunkSize = 3; // Number of lines to include before and after the comment line
+        const hunkStart = Math.max(0, i - hunkSize); // Start index
+        const hunkEnd = Math.min(diffLines.length, i + hunkSize + 1); // End index
+
+        // Create the diff hunk string
+        const diffHunk = diffLines.slice(hunkStart, hunkEnd).join('\n');
+
+        // Include diff_hunk in the comment object
+        comment.diff_hunk = diffHunk;
+        // Add the comment to the array for the current file
+        fileComments[currentFile].push(comment);
       }
     }
 
     // Create review comments on the PR
     for (const file in fileComments) {
       for (const comment of fileComments[file]) {
-        console.log({
-          owner,
-          repo,
-          pull_number: pull_request.number,
-          body: comment,
-          commit_id: pull_request.head.sha,
-          path: comment.path,
-          position: comment.position,
-        });
-
         if (!comment.position || !comment.diff_hunk) {
           console.error(`Invalid comment data: ${JSON.stringify(comment)}`);
           continue;  // Skip this comment
@@ -130,7 +134,6 @@ async function run() {
           position: comment.position,  // This needs to be a valid line number
           commit_id: comment.commit_id,
           path: comment.path,
-          position: comment.position,
           side: "RIGHT",
           diff_hunk: comment.diff_hunk  // This must be provided
         });
