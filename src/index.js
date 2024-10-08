@@ -93,7 +93,7 @@ async function run() {
 
         const lineComment = lineCommentResponse.data.choices[0].message.content;
         console.log('Response from OpenAI API:');
-        console.log(lineCommentResponse);
+        console.log(lineCommentResponse.data.choices[0]);
 
         // Create a comment object
         const comment = {
