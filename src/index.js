@@ -27,6 +27,8 @@ async function run() {
       },
     });
 
+    console.log('Looks good');
+
     // Fetch pull request data
     const { data: pull_request } = await octokit.pulls.get({ owner, repo, pull_number });
     const prTitle = pull_request.title;
