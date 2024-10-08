@@ -12,7 +12,7 @@ async function run() {
     const githubPrivateKey = core.getInput('github_private_key', { required: true });
     const githubInstallationId = core.getInput('github_installation_id', { required: true });
     
-    // Get the PR URL from the GitHub context
+    // Get the PR URL from the GitHub context and extract owner, repo, and pull_number
     const context = require('@actions/github').context;
     const { owner, repo } = context.repo;
     const pull_number = context.payload.pull_request.number;
