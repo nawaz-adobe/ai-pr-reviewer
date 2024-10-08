@@ -3,113 +3,92 @@ const { Octokit } = require('@octokit/rest');
 const { createAppAuth } = require('@octokit/auth-app');
 const axios = require('axios');
 
-async function run() {
-  function parseDiff(diff) {
-    const lines = diff.split('\n');
-    const hunks = [];
-    let currentHunk = null;
-    let currentFile = '';
-  
-    for (const line of lines) {
-        // Check for the start of a new file section
-        if (line.startsWith('diff --git')) {
-            const match = line.match(/a\/(.+) b\/(.+)/);
-            if (match) {
-                currentFile = match[1]; // Get the filename
-            }
-        }
-  
-        if (line.startsWith('@@')) {
-            // If there's an existing hunk, push it to the array
-            if (currentHunk) {
-                hunks.push({ ...currentHunk, filename: currentFile });
-            }
-  
-            // Extract line numbers from the hunk header
-            const match = line.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@/);
-            if (match) {
-                const startLineOld = parseInt(match[1], 10);
-                const startLineNew = parseInt(match[2], 10);
-                
-                currentHunk = { startLineOld, startLineNew, changes: [] };
-            }
-        } else if (currentHunk) {
-            // Collect changes
-            if (line.startsWith('+')) {
-                currentHunk.changes.push({ type: 'addition', line: line.slice(1) });
-            } else if (line.startsWith('-')) {
-                currentHunk.changes.push({ type: 'deletion', line: line.slice(1) });
-            }
-        }
-    }
-  
-    // Push the last hunk if it exists
-    if (currentHunk) {
-        hunks.push({ ...currentHunk, filename: currentFile });
-    }
-  
-    return hunks;
-  }
-  
-  async function getReviewFromOpenAI(hunk) {
-      const prompt = `Please review the following code changes:\n${hunk.changes.map(change => `${change.type}: ${change.line}`).join('\n')}`;
-  
-      const response = await axios.post(
-        "https://pr-review-bot.openai.azure.com/openai/deployments/pr-review-bot/chat/completions?api-version=2024-02-01",
-        {
-          messages: [
-            { role: "system", content: "You are an AI assistant that reviews code changes." },
-            { role: "user", content: prompt }
-          ],
-          max_tokens: 50,
-          temperature: 0.7,
-        },
-        {
-          headers: { "Content-Type": "application/json", "Api-Key": openaiApiKey }
-        }
-      );
-      
-      return response.data.choices[0].message.content;
-  }
-  
-  async function postCommentOnGitHub(owner, repo, pull_number, filename, line, body) {
-    try {
-        await octokit.pulls.createReviewComment({
-            owner,
-            repo,
-            pull_number,
-            body,
-            path: filename, // Specify the filename
-            line: line, // Specify the line number in the hunk
-        });
-        console.log(`Comment posted on pull request #${pull_number} in ${filename} at line ${line}: ${body}`);
-    } catch (error) {
-        console.error(`Failed to post comment on pull request #${pull_number}:`, error);
-    }
+function parseDiff(diff) {
+  const lines = diff.split('\n');
+  const hunks = [];
+  let currentHunk = null;
+  let currentFile = '';
+
+  for (const line of lines) {
+      // Check for the start of a new file section
+      if (line.startsWith('diff --git')) {
+          const match = line.match(/a\/(.+) b\/(.+)/);
+          if (match) {
+              currentFile = match[1]; // Get the filename
+          }
+      }
+
+      if (line.startsWith('@@')) {
+          // If there's an existing hunk, push it to the array
+          if (currentHunk) {
+              hunks.push({ ...currentHunk, filename: currentFile });
+          }
+
+          // Extract line numbers from the hunk header
+          const match = line.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@/);
+          if (match) {
+              const startLineOld = parseInt(match[1], 10);
+              const startLineNew = parseInt(match[2], 10);
+              
+              currentHunk = { startLineOld, startLineNew, changes: [] };
+          }
+      } else if (currentHunk) {
+          // Collect changes
+          if (line.startsWith('+')) {
+              currentHunk.changes.push({ type: 'addition', line: line.slice(1) });
+          } else if (line.startsWith('-')) {
+              currentHunk.changes.push({ type: 'deletion', line: line.slice(1) });
+          }
+      }
   }
 
-  try {
-    // Load environment variables
-    const openaiApiKey = core.getInput('openai_api_key', { required: true });
-    const githubAppId = core.getInput('github_app_id', { required: true });
-    const githubPrivateKey = core.getInput('github_private_key', { required: true });
-    const githubInstallationId = core.getInput('github_installation_id', { required: true });
+  // Push the last hunk if it exists
+  if (currentHunk) {
+      hunks.push({ ...currentHunk, filename: currentFile });
+  }
 
-    // Get the PR URL from the GitHub context and extract owner, repo, and pull_number
-    const context = require('@actions/github').context;
-    const { owner, repo } = context.repo;
-    const pull_number = context.payload.pull_request.number;
+  return hunks;
+}
 
-    // Initialize Octokit
-    const octokit = new Octokit({
-      authStrategy: createAppAuth,
-      auth: {
-        appId: githubAppId,
-        privateKey: githubPrivateKey.replace(/\\n/g, '\n'),
-        installationId: githubInstallationId,
+async function getReviewFromOpenAI(hunk) {
+    const prompt = `Please review the following code changes:\n${hunk.changes.map(change => `${change.type}: ${change.line}`).join('\n')}`;
+
+    const response = await axios.post(
+      "https://pr-review-bot.openai.azure.com/openai/deployments/pr-review-bot/chat/completions?api-version=2024-02-01",
+      {
+        messages: [
+          { role: "system", content: "You are an AI assistant that reviews code changes." },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 50,
+        temperature: 0.7,
       },
-    });
+      {
+        headers: { "Content-Type": "application/json", "Api-Key": openaiApiKey }
+      }
+    );
+    
+    return response.data.choices[0].message.content;
+}
 
+async function postCommentOnGitHub(owner, repo, pull_number, filename, line, body) {
+  try {
+      await octokit.pulls.createReviewComment({
+          owner,
+          repo,
+          pull_number,
+          body,
+          path: filename, // Specify the filename
+          line: line, // Specify the line number in the hunk
+      });
+      console.log(`Comment posted on pull request #${pull_number} in ${filename} at line ${line}: ${body}`);
+  } catch (error) {
+      console.error(`Failed to post comment on pull request #${pull_number}:`, error);
+  }
+}
+
+async function run() {
+  try {
     // Fetch pull request data
     const { data: pull_request } = await octokit.pulls.get({ owner, repo, pull_number });
     const prTitle = pull_request.title;
@@ -238,4 +217,24 @@ async function run() {
   }
 }
 
+// Load environment variables
+const openaiApiKey = core.getInput('openai_api_key', { required: true });
+const githubAppId = core.getInput('github_app_id', { required: true });
+const githubPrivateKey = core.getInput('github_private_key', { required: true });
+const githubInstallationId = core.getInput('github_installation_id', { required: true });
+
+// Get the PR URL from the GitHub context and extract owner, repo, and pull_number
+const context = require('@actions/github').context;
+const { owner, repo } = context.repo;
+const pull_number = context.payload.pull_request.number;
+
+// Initialize Octokit
+const octokit = new Octokit({
+  authStrategy: createAppAuth,
+  auth: {
+    appId: githubAppId,
+    privateKey: githubPrivateKey.replace(/\\n/g, '\n'),
+    installationId: githubInstallationId,
+  },
+});
 run();
