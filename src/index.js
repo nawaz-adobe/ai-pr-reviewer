@@ -81,7 +81,9 @@ async function postCommentOnGitHub(owner, repo, pull_number, filename, line, bod
           body,
           commit_id,
           path: filename, // Specify the filename
-          position: line // Specify the line number in the hunk
+          line, 
+          start_line: line,
+          start_side: 'RIGHT'
       });
       console.log(`Comment posted on pull request #${pull_number} in ${filename} at line ${line}: ${body}`);
   } catch (error) {
