@@ -8,9 +8,9 @@ function parseDiff(diff) {
   const hunks = [];
   let currentHunk = null;
   let currentFile = '';
+  let currentDiffHunk = '';
 
   for (const line of lines) {
-      // Check for the start of a new file section
       if (line.startsWith('diff --git')) {
           const match = line.match(/a\/(.+) b\/(.+)/);
           if (match) {
@@ -21,7 +21,7 @@ function parseDiff(diff) {
       if (line.startsWith('@@')) {
           // If there's an existing hunk, push it to the array
           if (currentHunk) {
-              hunks.push({ ...currentHunk, filename: currentFile });
+              hunks.push({ ...currentHunk, filename: currentFile, diff_hunk: currentDiffHunk });
           }
 
           // Extract line numbers from the hunk header
@@ -31,6 +31,7 @@ function parseDiff(diff) {
               const startLineNew = parseInt(match[2], 10);
               
               currentHunk = { startLineOld, startLineNew, changes: [] };
+              currentDiffHunk = line; // Save the hunk header for later
           }
       } else if (currentHunk) {
           // Collect changes
@@ -44,7 +45,7 @@ function parseDiff(diff) {
 
   // Push the last hunk if it exists
   if (currentHunk) {
-      hunks.push({ ...currentHunk, filename: currentFile });
+      hunks.push({ ...currentHunk, filename: currentFile, diff_hunk: currentDiffHunk });
   }
 
   return hunks;
@@ -71,7 +72,7 @@ async function getReviewFromOpenAI(hunk) {
     return response.data.choices[0].message.content;
 }
 
-async function postCommentOnGitHub(owner, repo, pull_number, filename, line, body, commit_id) {
+async function postCommentOnGitHub(owner, repo, pull_number, filename, line, body, commit_id, diff_hunk) {
   try {
       await octokit.pulls.createReviewComment({
           owner,
@@ -79,8 +80,9 @@ async function postCommentOnGitHub(owner, repo, pull_number, filename, line, bod
           pull_number,
           body,
           commit_id,
+          diff_hunk,
           path: filename, // Specify the filename
-          line: line, // Specify the line number in the hunk
+          line: line // Specify the line number in the hunk
       });
       console.log(`Comment posted on pull request #${pull_number} in ${filename} at line ${line}: ${body}`);
   } catch (error) {
@@ -136,7 +138,7 @@ async function run() {
         const review = await getReviewFromOpenAI(hunk);
         
         // Post the comment to GitHub (you'll need to implement this function)
-        await postCommentOnGitHub(owner, repo, pull_number, hunk.filename, hunk.startLineNew,  review, pull_request.head.sha);
+        await postCommentOnGitHub(owner, repo, pull_number, hunk.filename, hunk.startLineNew,  review, pull_request.head.sha, hunk.diff_hunk);
     }
 
     // Post comments on specific lines
