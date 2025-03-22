@@ -1,0 +1,27 @@
+name: AI Code Review Example
+
+on:
+  pull_request:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull Request Number'
+        required: true
+        type: string
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: AI Code Review
+        uses: your-username/ai-code-review@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          openai-endpoint: ${{ secrets.OPENAI_ENDPOINT }}
+          github-app-id: ${{ secrets.GITHUB_APP_ID }}
+          github-installation-id: ${{ secrets.GITHUB_INSTALLATION_ID }}
+          pull-request-number: ${{ github.event.pull_request.number || inputs.pr_number }}
