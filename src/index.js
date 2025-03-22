@@ -1,147 +1,223 @@
+require('dotenv').config();
+
 const core = require('@actions/core');
 const { Octokit } = require('@octokit/rest');
 const { createAppAuth } = require('@octokit/auth-app');
-const axios = require('axios');
+const fs = require('fs');
+
+const parseDiff = require('./parseDiff');
+const { getReviewFromOpenAI, getSummaryFromOpenAI } = require('./openAI');
+
+async function postCommentOnGitHub(owner, repo, pull_number, filename, line, body, commit_id) {
+  console.log('Posting comment with params:', {
+    owner,
+    repo,
+    pull_number,
+    filename,
+    line,
+    commit_id,
+    bodyLength: body?.length
+  });
+
+  if (!owner || !repo || !pull_number || !filename || !line || !body || !commit_id) {
+    throw new Error('Missing required parameters for posting a comment.');
+  }
+
+  const commentPayload = {
+    owner,
+    repo,
+    pull_number,
+    body,
+    commit_id,
+    path: filename,
+    line,
+    side: 'RIGHT',
+  };
+
+  try {
+    const response = await octokit.pulls.createReviewComment(commentPayload);
+    console.log(`Successfully posted comment. Response status: ${response.status}`);
+    return response;
+  } catch (error) {
+    console.error('GitHub API Error:', {
+      status: error.status,
+      message: error.message,
+      response: error.response?.data,
+      payload: commentPayload
+    });
+    throw error;
+  }
+}
 
 async function run() {
   try {
-    // Load environment variables
-    const openaiApiKey = core.getInput('openai_api_key', { required: true });
-    const githubAppId = core.getInput('github_app_id', { required: true });
-    const githubPrivateKey = core.getInput('github_private_key', { required: true });
-    const githubInstallationId = core.getInput('github_installation_id', { required: true });
-    
-    // Get the PR URL from the GitHub context and extract owner, repo, and pull_number
-    const context = require('@actions/github').context;
-    const { owner, repo } = context.repo;
-    const pull_number = context.payload.pull_request.number;
-
-    // Initialize Octokit
-    const octokit = new Octokit({
-      authStrategy: createAppAuth,
-      auth: {
-        appId: githubAppId,
-        privateKey: githubPrivateKey.replace(/\\n/g, '\n'),
-        installationId: githubInstallationId,
-      },
-    });
-
-    // Fetch pull request data
     const { data: pull_request } = await octokit.pulls.get({ owner, repo, pull_number });
     const prTitle = pull_request.title;
+    console.log('PR Title:', prTitle);
 
-    // Fetch the diff of the pull request
-    const { data: diffData } = await octokit.pulls.get({
+    // Get all commits in the PR
+    const { data: commits } = await octokit.pulls.listCommits({
       owner,
       repo,
       pull_number,
-      mediaType: { format: 'diff' },
     });
 
-    // Call OpenAI API to summarize PR changes
-    const response = await axios.post(
-      "https://pr-review-bot.openai.azure.com/openai/deployments/pr-review-bot/chat/completions?api-version=2024-02-01",
-      {
-        messages: [
-          { role: "system", content: "You are an AI assistant that summarizes pull request changes." },
-          { role: "user", content: `Summarize the following pull request changes:\n\n${diffData}` }
-        ],
-        max_tokens: 1500,
-        temperature: 0.7,
-      },
-      {
-        headers: { "Content-Type": "application/json", "Api-Key": openaiApiKey }
-      }
-    );
-
-    const summary = response.data.choices[0].message.content;
-
-    // Post a summary comment to the PR
-    await octokit.issues.createComment({
+    // Get the last reviewed commit from PR comments
+    const { data: comments } = await octokit.issues.listComments({
       owner,
       repo,
-      issue_number: pull_request.number,
-      body: `### PR Review Summary:\n${summary}`,
+      issue_number: pull_number,
     });
 
-    // Post comments on specific lines
-    const diffLines = diffData.split('\n');
-    const fileComments = {};
-    let currentFile = null;
+    const lastReviewedCommit = findLastReviewedCommit(comments);
+    const newCommits = commits.filter(commit => 
+      !lastReviewedCommit || new Date(commit.commit.committer.date) > new Date(lastReviewedCommit.date)
+    );
 
-    for (let i = 0; i < diffLines.length; i++) {
-      const line = diffLines[i];
-      console.log(line);
-      if (line.startsWith("+++ b/")) {
-        currentFile = line.substring(6);
-        fileComments[currentFile] = [];
-      }
-      if (line.startsWith("+") && !line.startsWith("+++")) {
-        const lineCommentResponse = await axios.post(
-          "https://pr-review-bot.openai.azure.com/openai/deployments/pr-review-bot/chat/completions?api-version=2024-02-01",
-          {
-            messages: [
-              { role: "system", content: "You are an AI assistant that reviews code changes." },
-              { role: "user", content: `Review the following code line:\n\n${line}\n\nComment:` }
-            ],
-            max_tokens: 50,
-            temperature: 0.7,
-          },
-          {
-            headers: { "Content-Type": "application/json", "Api-Key": openaiApiKey }
-          }
-        );
-
-        const lineComment = lineCommentResponse.data.choices[0].message.content;
-
-        // Create a comment object
-        const comment = {
-          body: lineComment,
-          commit_id: pull_request.head.sha,
-          path: currentFile,
-          position: i + 1, // Adjust the position if needed
-        };
-
-        // Get the diff hunk for the comment
-        const hunkSize = 3; // Number of lines to include before and after the comment line
-        const hunkStart = Math.max(0, i - hunkSize); // Start index
-        const hunkEnd = Math.min(diffLines.length, i + hunkSize + 1); // End index
-
-        // Create the diff hunk string
-        const diffHunk = diffLines.slice(hunkStart, hunkEnd).join('\n');
-
-        // Include diff_hunk in the comment object
-        comment.diff_hunk = diffHunk;
-        // Add the comment to the array for the current file
-        fileComments[currentFile].push(comment);
-      }
+    if (newCommits.length === 0) {
+      console.log('No new commits to review');
+      return;
     }
 
-    // Create review comments on the PR
-    for (const file in fileComments) {
-      for (const comment of fileComments[file]) {
-        if (!comment.position || !comment.diff_hunk) {
-          console.error(`Invalid comment data: ${JSON.stringify(comment)}`);
-          continue;  // Skip this comment
-        }
+    // Get diff since last review
+    const diffResponse = await octokit.repos.compareCommits({
+      owner,
+      repo,
+      base: lastReviewedCommit ? lastReviewedCommit.sha : commits[0].parents[0].sha,
+      head: pull_request.head.sha,
+    });
 
-        await octokit.pulls.createReviewComment({
-          owner,
-          repo,
-          pull_number,
-          body: comment.body,
-          position: comment.position,  // This needs to be a valid line number
-          commit_id: comment.commit_id,
-          path: comment.path,
-          side: "RIGHT",
-          diff_hunk: comment.diff_hunk  // This must be provided
+    const diffData = diffResponse.data.files
+      .map(file => `diff --git a/${file.filename} b/${file.filename}\n${file.patch || ''}`)
+      .join('\n');
+
+    // Generate and post updated summary
+    try {
+      console.log('Generating incremental PR summary...');
+      const summary = await getSummaryFromOpenAI(diffData);
+      
+      const summaryHeader = `### AI Review Summary (Updated for commit ${pull_request.head.sha.substring(0, 7)})
+Last reviewed commit: ${lastReviewedCommit ? lastReviewedCommit.sha.substring(0, 7) : 'Initial Review'}
+
+${summary}`;
+
+      await octokit.issues.createComment({
+        owner,
+        repo,
+        issue_number: pull_number,
+        body: summaryHeader,
+      });
+      console.log('Successfully posted updated PR summary');
+    } catch (summaryError) {
+      console.error('Failed to post summary:', summaryError);
+    }
+
+    // Process new changes
+    const hunks = parseDiff(diffData);
+
+    try {
+      for (const hunk of hunks) {
+        console.log('Processing hunk:', {
+          filename: hunk.filename,
+          changesCount: hunk.changes?.length,
+          hunkHeader: hunk.hunkHeader
         });
-      }
-    }
 
+        if (!hunk || !hunk.filename || !hunk.changes) {
+          throw new Error('Invalid hunk data. Ensure all necessary fields are provided.');
+        }
+        
+        const reviewResponse = await getReviewFromOpenAI(hunk);
+        console.log('Review response:', reviewResponse);
+        
+        if (!reviewResponse.comments || !Array.isArray(reviewResponse.comments)) {
+          console.warn('No valid comments in review response:', reviewResponse);
+          continue;
+        }
+        
+        for(const comment of reviewResponse.comments) {
+          console.log('Attempting to post comment:', {
+            filename: hunk.filename,
+            line: comment.line,
+            body: comment.body
+          });
+          
+          if (!comment.line || !comment.body) {
+            console.warn('Invalid comment data:', comment);
+            continue;
+          }
+          
+          try {
+            await postCommentOnGitHub(
+              owner,
+              repo,
+              pull_number,
+              hunk.filename,
+              comment.line,
+              comment.body,
+              pull_request.head.sha,
+            );
+            console.log('Successfully posted comment');
+          } catch (commentError) {
+            console.error('Failed to post individual comment:', {
+              error: commentError.message,
+              response: commentError.response?.data,
+              comment
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Error in review process:`, {
+        message: err.message,
+        stack: err.stack,
+        response: err.response?.data
+      });
+      throw err;
+    }
   } catch (error) {
     core.setFailed(`Action failed with error: ${error.message}`);
   }
 }
+
+function findLastReviewedCommit(comments) {
+  // Look for our AI review comments to find the last reviewed commit
+  const reviewComments = comments.filter(comment => 
+    comment.body.includes('AI Review Summary') && 
+    comment.body.includes('Updated for commit')
+  );
+
+  if (reviewComments.length === 0) return null;
+
+  const lastReview = reviewComments[reviewComments.length - 1];
+  const match = lastReview.body.match(/Updated for commit ([a-f0-9]{7})/);
+  
+  if (!match) return null;
+
+  return {
+    sha: match[1],
+    date: lastReview.created_at
+  };
+}
+
+// Get inputs from action.yml
+const openaiApiKey = core.getInput('openai-api-key');
+const openaiEndpoint = core.getInput('openai-endpoint');
+const githubAppId = core.getInput('github-app-id');
+const githubInstallationId = core.getInput('github-installation-id');
+const pull_number = parseInt(core.getInput('pull-request-number'), 10);
+
+// Get repository information from GitHub context
+const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+
+// Initialize Octokit with GitHub App authentication
+const octokit = new Octokit({
+  authStrategy: createAppAuth,
+  auth: {
+    appId: githubAppId,
+    privateKey: core.getInput('github-token'),
+    installationId: githubInstallationId,
+  },
+});
 
 run();

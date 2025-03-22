@@ -1,22 +1,35 @@
-name: 'AI PR Reviewer'
-description: 'Helps with technical & Contextual PR review'
+name: 'AI Code Review'
+description: 'Automated code review using AI for pull requests'
 author: 'Farhan Nawaz <nawaz@adobe.com>'
+
 inputs:
-  openai_api_key:
+  github-token:
+    description: 'GitHub token for authentication'
+    required: true
+  openai-api-key:
     description: 'OpenAI API key'
     required: true
-  github_app_id:
+  openai-endpoint:
+    description: 'OpenAI API endpoint'
+    required: true
+  github-app-id:
     description: 'GitHub App ID'
     required: true
-  github_private_key:
-    description: 'GitHub Private Key'
+  github-installation-id:
+    description: 'GitHub App Installation ID'
     required: true
-  github_installation_id:
-    description: 'GitHub Installation ID'
+  pull-request-number:
+    description: 'Pull Request number to review'
     required: true
+
 outputs:
   comments:
     description: 'Review Comments'
+
 runs:
-  using: 'node20'
-  main: 'src/index.js'
+  using: 'node16'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'code'
+  color: 'blue'

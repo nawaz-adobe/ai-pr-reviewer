@@ -1,28 +1,31 @@
 {
-    "name": "ai-pr-reviewer",
+    "name": "ai-code-review-action",
     "version": "1.0.0",
-    "description": "Helps with technical & Contextual PR review",
-    "main": "src/index.js",
+    "description": "AI-powered code review GitHub Action",
+    "main": "dist/index.js",
     "scripts": {
-      "test": "echo \"Error: no test specified\" && exit 1"
+        "build": "ncc build src/index.js -o dist",
+        "prepare": "npm run build"
     },
     "dependencies": {
-      "@actions/core": "^1.10.0",
-      "@actions/github": "^5.0.0",
-      "@octokit/rest": "^18.0.0",
-      "@octokit/auth-app": "^4.0.0",
-      "axios": "^0.24.0",
-      "dotenv": "^10.0.0"
+        "@actions/core": "^1.10.0",
+        "@actions/github": "^5.1.1",
+        "@octokit/rest": "^19.0.7",
+        "@octokit/auth-app": "^4.0.9",
+        "axios": "^1.3.4"
+    },
+    "devDependencies": {
+        "@vercel/ncc": "^0.36.1"
     },
     "engines": {
-      "node": ">=20.x"
+        "node": ">=20.x"
     },
     "keywords": [
-      "github",
-      "action",
-      "openai",
-      "pull request"
+        "github",
+        "action",
+        "openai",
+        "pull request"
     ],
     "author": "Farhan Nawaz <nawaz@adobe.com>",
     "license": "Apache 2.0"
-}  
+}
