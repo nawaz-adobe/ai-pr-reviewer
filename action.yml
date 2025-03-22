@@ -3,7 +3,7 @@ description: 'Automated code review using AI for pull requests'
 author: 'Farhan Nawaz <nawaz@adobe.com>'
 
 inputs:
-  github-token:
+  gh-token:
     description: 'GitHub token for authentication'
     required: true
   openai-api-key:
@@ -12,10 +12,10 @@ inputs:
   openai-endpoint:
     description: 'OpenAI API endpoint'
     required: true
-  github-app-id:
+  gh-app-id:
     description: 'GitHub App ID'
     required: true
-  github-installation-id:
+  gh-installation-id:
     description: 'GitHub App Installation ID'
     required: true
   pull-request-number:
